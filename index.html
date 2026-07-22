@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TBC</title>
+    <style>
+        /* Eliminate phone scrolling and default margins */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Helvetica Neue', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Mobile responsive container */
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 450px; /* Looks like a classic phone app screen */
+            max-height: 850px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #70c5ce; /* Flappy sky blue */
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const playerImg = new Image();
+playerImg.src = "amitjicontinue.jpeg";
+
+const happyImg = new Image();
+happyImg.src = "amitjistart.jpeg";
+
+const dictatorImg = new Image();
+dictatorImg.src = "amitjiend.jpeg";
+
+const backgroundImg = new Image();
+backgroundImg.src = "garden.jpeg";
+
+const fireImg = new Image();
+fireImg.src = "fire.jpg";
+
+
+const gameMusic = new Audio("only aag.mp3");
+gameMusic.preload = "auto";
+gameMusic.loop = false;
+
+const shavaMusic = new Audio("shava.mp3");
+shavaMusic.preload = "auto";
+shavaMusic.loop = true;
+const loseMusic = new Audio("fullaag.mp3");
+loseMusic.preload = "auto";
+const rulesMusic = new Audio("start.mp3");
+rulesMusic.preload="auto";
+const wahMusic = new Audio("wah.mp3");
+wahMusic.preload = "auto";
+const ctx = canvas.getContext("2d");
+
+
+// Base resolution for game logic consistency
+const baseWidth = 400;
+const baseHeight = 700;
+
+// Set actual dynamic drawing resolution
+canvas.width = baseWidth;
+canvas.height = baseHeight;
+
+// Game constants & state variables
+const GRAVITY = 0.25;
+const JUMP_STRENGTH = -5.5;
+const PIPE_SPEED = 2.8;
+const PIPE_SPAWN_RATE = 100; // frames
+const GAP_SIZE = 160;
+
+let bird = { x: 50, y: 300, radius: 14, velocity: 0 };
+let pipes = [];
+let frameCount = 0;
+let score = 0;
+let bestScore = localStorage.getItem("bestScore") || 0;
+let gameOver = false;
+let gameStarted = false;
+let menu = true;
+let rulesScreen = false;
+// Input management (Both Touch for mobile and click for debugging)
+function handleAction(e){
+e.preventDefault();
+const rect=canvas.getBoundingClientRect();
+const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+
+const x = (clientX - rect.left) * (baseWidth / rect.width);
+const y = (clientY - rect.top) * (baseHeight / rect.height);
+// MAIN MENU
+if(menu){
+// START BUTTON
+if(x>120&&x<280&&y>370&&y<420){
+menu=false;
+gameStarted=true;
+gameMusic.currentTime=0;
+gameMusic.play();
+gameMusic.onended = function() {
+    gameMusic.pause();
+    gameMusic.currentTime = 0;
+
+    shavaMusic.currentTime = 0;
+    shavaMusic.play();
+};
+}
+// RULES BUTTON
+else if(x>120&&x<280&&y>440&&y<490){
+menu=false;
+rulesScreen=true;
+rulesMusic.currentTime=0;
+rulesMusic.play();
+}
+return;
+}
+// RULES SCREEN
+
+if (rulesScreen) {
+
+    // ❌ button area
+    if (x > 330 && x < 390 && y > 20 && y < 80) {
+
+        rulesMusic.pause();
+        rulesMusic.currentTime = 0;
+
+        rulesScreen = false;
+        menu = true;
+    }
+
+    return;
+}
+if (gameOver) {
+
+    // Retry button
+    if (x >= 60 && x <= 170 && y >= 560 && y <= 610) {
+
+        resetGame();
+
+        menu = false;
+        gameStarted = true;
+
+        gameMusic.currentTime = 0;
+        gameMusic.play();
+
+        return;
+    }
+
+// Back button
+if (x >= 230 && x <= 340 && y >= 560 && y <= 610) {
+
+    wahMusic.pause();
+    wahMusic.currentTime = 0;
+
+    loseMusic.pause();
+    loseMusic.currentTime = 0;
+
+    shavaMusic.pause();
+    shavaMusic.currentTime = 0;
+
+    gameMusic.pause();
+    gameMusic.currentTime = 0;
+
+    rulesMusic.pause();
+    rulesMusic.currentTime = 0;
+
+    resetGame();
+
+    menu = true;
+    gameStarted = false;
+
+    return;
+}
+
+    // Ignore all other taps
+    return;
+}
+bird.velocity=JUMP_STRENGTH;
+}
+
+window.addEventListener("touchstart", handleAction, { passive: false });
+window.addEventListener("mousedown", handleAction);
+
+function resetGame() {
+    bird.y = 300;
+    bird.velocity = 0;
+    pipes = [];
+    score = 0;
+    frameCount = 0;
+    gameOver = false;
+    gameStarted = false;
+    gameMusic.pause ();
+    gameMusic.currentTime=0;
+    loseMusic.pause();
+    loseMusic.currentTime=0;
+    menu=true;
+rulesScreen=false;
+rulesMusic.pause();
+rulesMusic.currentTime=0;
+shavaMusic.pause();
+shavaMusic.currentTime = 0;
+}
+
+// Main Game Loop
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// Logic updates
+function endGame() { 
+  if (gameOver) return ;
+  gameOver=true;
+  if (navigator.vibrate) {
+    navigator.vibrate([150, 50, 150]);
+}
+
+  gameMusic.pause();
+gameMusic.currentTime = 0;
+shavaMusic.pause();
+shavaMusic.currentTime = 0;
+
+if (score === 7) {
+    wahMusic.currentTime = 0;
+
+    wahMusic.play().catch(err => {
+        console.log(err);
+    });
+} else {
+    loseMusic.currentTime = 0;
+
+    loseMusic.play().catch(err => {
+        console.log(err);
+    });
+}
+}
+function update() {
+    if (!gameStarted || gameOver) return;
+
+    // Bird movement physics
+    bird.velocity += GRAVITY;
+    bird.y += bird.velocity;
+
+    // Ceiling / Floor boundaries check
+    if (bird.y + bird.radius >= baseHeight || bird.y - bird.radius <= 0) {
+        endGame()
+    }
+
+    // Pipe generation logic
+    if (frameCount % PIPE_SPAWN_RATE === 0) {
+        let minHeight = 50;
+        let maxHeight = baseHeight - GAP_SIZE - 100;
+        let topPipeHeight = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+        
+        pipes.push({
+            x: baseWidth,
+            topHeight: topPipeHeight,
+            passed: false
+        });
+    }
+
+    // Pipe movement & collision checks
+    for (let i = pipes.length - 1; i >= 0; i--) {
+        pipes[i].x -= PIPE_SPEED;
+
+        // Scoring mechanic
+        if (!pipes[i].passed && pipes[i].x < bird.x) {
+            score++;
+            pipes[i].passed = true;
+        }
+
+        // Collision detection box parameters
+        let topBox = { x: pipes[i].x, y: 0, w: 60, h: pipes[i].topHeight };
+        let bottomBox = { x: pipes[i].x, y: pipes[i].topHeight + GAP_SIZE, w: 60, h: baseHeight };
+
+        if (checkCollision(bird, topBox) || checkCollision(bird, bottomBox)) {
+            endGame();
+        }
+
+        // Garbage collection for off-screen pipes
+        if (pipes[i].x + 60 < 0) {
+            pipes.splice(i, 1);
+        }
+    }
+
+    frameCount++;
+}
+
+// Circle to Rectangle collision formula
+function checkCollision(circle, rect) {
+    let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
+    let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
+    
+    let distanceX = circle.x - closestX;
+    let distanceY = circle.y - closestY;
+    
+    return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
+}
+
+// Canvas rendering visual layout
+function draw() {
+    // Clear display
+    ctx.clearRect(0, 0, baseWidth, baseHeight);
+
+    // Draw Background Scene Design
+    ctx.drawImage(backgroundImg, 0, 0, baseWidth, baseHeight);
+
+    // Draw Obstacle Pipes
+    pipes.forEach(pipe => {
+        ctx.drawImage(
+    fireImg,
+    pipe.x,
+    0,
+    60,
+    pipe.topHeight
+);
+
+ctx.drawImage(
+    fireImg,
+    pipe.x,
+    pipe.topHeight + GAP_SIZE,
+    60,
+    baseHeight - (pipe.topHeight + GAP_SIZE)
+);
+});
+
+    // Draw Barcelona Logo
+   ctx.save();
+
+ctx.translate(bird.x, bird.y);
+
+let angle = bird.velocity * 0.08;
+
+if (angle > 0.6) angle = 0.6;
+if (angle < -0.6) angle = -0.6;
+
+ctx.rotate(angle);
+
+ctx.drawImage(
+    playerImg,
+    -25,
+    -18,
+    50,
+    36
+);
+
+ctx.restore();
+    // Draw Heads Up Display Score text
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 35px sans-serif";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+    ctx.textAlign = "center";
+    ctx.strokeText(score+ " Cr", baseWidth / 2, 80);
+    ctx.fillText(score+ " Cr", baseWidth / 2, 80);
+
+    // Dynamic Title UI Panel for Brand Launch
+    if(menu){
+
+ctx.fillStyle="black";
+
+ctx.fillRect(0,0,baseWidth,baseHeight);
+
+ctx.drawImage(happyImg,100,40,200,180);
+
+
+
+ctx.fillStyle="white";
+
+ctx.font="bold 38px sans-serif";
+
+ctx.textAlign="center";
+
+ctx.fillText("Tum Banoge Crorepati ",200,290);
+
+
+
+// START BUTTON
+
+ctx.fillStyle="#00AA00";
+
+ctx.fillRect(120,360,160,50);
+
+ctx.fillStyle="white";
+
+ctx.font="bold 24px sans-serif";
+
+ctx.fillText("START",200,395);
+
+
+
+// INFO BUTTON
+
+ctx.fillStyle="#0066FF";
+
+ctx.fillRect(120,430,160,50);
+
+ctx.fillStyle="white";
+
+ctx.fillText("INFO",200,465);
+
+
+
+return;
+
+}
+if(rulesScreen){
+
+ctx.fillStyle = "#f5f5f5";
+ctx.fillRect(0, 0, baseWidth, baseHeight);
+
+ctx.textAlign = "center";
+
+ctx.fillStyle = "#b30000";
+ctx.font = "bold 34px sans-serif";
+ctx.fillText("📜 GAME RULES", 200, 60);
+
+ctx.strokeStyle = "#000";
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(40, 80);
+ctx.lineTo(360, 80);
+ctx.stroke();
+
+ctx.textAlign = "left";
+ctx.fillStyle = "#111";
+ctx.font = "20px sans-serif";
+
+ctx.fillText("• Protect Amit Ji from the fire.", 35, 130);
+ctx.fillText("• Every save earns you ₹1 Cr.", 35, 170);
+ctx.fillText("• Reach 7 Cr for a surprise!", 35, 210);
+ctx.fillText("• Rekha Ji is waiting for you...", 35, 250);
+ctx.fillText("• Amit Ji may entertain you", 35, 290);
+ctx.fillText("  with his singing.", 35, 320);
+
+ctx.fillStyle = "#006600";
+ctx.font = "bold 18px sans-serif";
+ctx.fillText("Tip: If audio doesn't start,", 35, 390);
+ctx.fillText("restart the game once.", 35, 420);
+
+ctx.textAlign = "center";
+ctx.fillStyle = "#888";
+ctx.font = "16px sans-serif";
+ctx.fillText("Tap ❌ to return", 200, 650);
+
+ctx.fillStyle = "red";
+ctx.font = "bold 34px sans-serif";
+ctx.fillText("❌", 360, 50);
+
+
+return;
+
+}
+    
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillRect(0, 0, baseWidth, baseHeight);
+        ctx.drawImage(dictatorImg, 90,30,220,220);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 35px sans-serif";
+        ctx.textAlign = "center";
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 5;
+        ctx.strokeText("HOYE SHAVA SHAVA", baseWidth / 2, baseHeight / 2 - 20);
+        ctx.fillText("HOYE SHAVA SHAVA", baseWidth / 2, baseHeight / 2 - 20);
+        ctx.font = "bold 28px sans-serif";
+        ctx.fillStyle = "#FFD700";
+        ctx.fillText("YOU WIN : " + score + " Cr" , baseWidth / 2 , baseHeight/2+70);
+        ctx.font = "bold 22px sans-serif";
+        ctx.fillStyle = "#00FFFF";
+        ctx.fillText("HIGHEST WIN : " + bestScore+ " Cr", baseWidth / 2, baseHeight / 2 + 110);
+        ctx.font = "18px sans-serif";
+        ctx.lineWidth = 3;
+        ctx.strokeText("GAREEB", baseWidth / 2, baseHeight / 2 + 25);
+        ctx.fillText("GAREEB", baseWidth / 2, baseHeight / 2 + 25);
+               // Retry button
+ctx.fillStyle = "#28a745";
+ctx.fillRect(60, 560, 110, 50);
+
+ctx.fillStyle = "#ffffff";
+ctx.font = "bold 24px Arial";
+ctx.textAlign = "center";
+ctx.fillText("RETRY", 115, 593);
+
+// Back button
+ctx.fillStyle = "#0066ff";
+ctx.fillRect(230, 560, 110, 50);
+
+ctx.fillStyle = "#ffffff";
+ctx.fillText("BACK", 285, 593);
+       ctx.strokeStyle = "white";
+ctx.lineWidth = 3;
+
+ctx.strokeRect(60, 560, 110, 50);
+ctx.strokeRect(230, 560, 110, 50);
+    }
+}
+
+// Start Game Engine loops
+gameLoop();
+</script>
+</body>
+</html>
